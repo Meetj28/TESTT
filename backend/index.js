@@ -125,7 +125,7 @@ import axios from "axios";
 const app = express();
 const server = http.createServer(app);
 
-const url = `https://realtime-code-editor-utu5.onrender.com`;
+const url = `http://localhost:5000`;
 const interval = 30000;
 
 function reloadWebsite() {
