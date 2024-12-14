@@ -369,27 +369,26 @@
 
 
 
-
 import { useEffect, useState, useRef } from "react";
 import "./App.css";
 import io from "socket.io-client";
 import Editor from "@monaco-editor/react";
 
-const socket = io("https://testt-xxvk.onrender.com");
+const socket = io("https://realtime-code-editor-utu5.onrender.com");
 
 const App = () => {
   const [joined, setJoined] = useState(false);
   const [roomId, setRoomId] = useState("");
   const [userName, setUserName] = useState("");
   const [language, setLanguage] = useState("javascript");
-  const [code, setCode] = useState("// start code here");
-  const [copySuccess, setCopySuccess] = useState("");
+  const [code, setCode] = useState("// start coding here");
   const [users, setUsers] = useState([]);
   const [typing, setTyping] = useState("");
   const [output, setOutput] = useState("");
+  const [userCursors, setUserCursors] = useState({});
   const editorRef = useRef(null);
 
-  const [userCursors, setUserCursors] = useState([]); // State to store other users' cursors
+  const userColors = useRef({}); // Map to store colors for each user
 
   useEffect(() => {
     socket.on("userJoined", (users) => {
@@ -409,8 +408,8 @@ const App = () => {
       setLanguage(newLanguage);
     });
 
-    socket.on("updateCursors", (userCursors) => {
-      setUserCursors(userCursors);
+    socket.on("updateCursors", (cursors) => {
+      setUserCursors(cursors);
     });
 
     return () => {
@@ -446,16 +445,10 @@ const App = () => {
     setJoined(false);
     setRoomId("");
     setUserName("");
-    setCode("// start code here");
+    setCode("// start coding here");
     setLanguage("javascript");
     setOutput("");
-    setUserCursors([]);
-  };
-
-  const copyRoomId = () => {
-    navigator.clipboard.writeText(roomId);
-    setCopySuccess("Copied!");
-    setTimeout(() => setCopySuccess(""), 2000);
+    setUserCursors({});
   };
 
   const handleCodeChange = (newCode) => {
@@ -469,6 +462,46 @@ const App = () => {
     setLanguage(newLanguage);
     socket.emit("languageChange", { roomId, language: newLanguage });
   };
+
+  const handleEditorDidMount = (editor) => {
+    editorRef.current = editor;
+
+    editor.onDidChangeCursorPosition(() => {
+      const position = editor.getPosition();
+      socket.emit("cursorChange", { roomId, userName, position });
+    });
+  };
+
+  useEffect(() => {
+    if (editorRef.current) {
+      const decorations = Object.entries(userCursors).map(([user, position]) => {
+        if (!userColors.current[user]) {
+          // Assign a random color to the user if not already assigned
+          userColors.current[user] = `#${Math.floor(Math.random() * 16777215).toString(16)}`;
+        }
+
+        return {
+          range: new monaco.Range(
+            position.lineNumber,
+            position.column,
+            position.lineNumber,
+            position.column
+          ),
+          options: {
+            className: "remote-cursor",
+            glyphMarginClassName: "remote-cursor-marker",
+            isWholeLine: false,
+            inlineClassName: "remote-cursor-inline",
+            afterContentClassName: "remote-cursor-content",
+            hoverMessage: { value: `**${user}**` },
+            beforeContentClassName: `cursor-${userColors.current[user]}`,
+          },
+        };
+      });
+
+      editorRef.current.deltaDecorations([], decorations);
+    }
+  }, [userCursors]);
 
   const runCode = async () => {
     try {
@@ -491,34 +524,6 @@ const App = () => {
       setOutput("Error running code: " + error.message);
     }
   };
-
-  const handleEditorDidMount = (editor) => {
-    editorRef.current = editor;
-
-    editor.onDidChangeCursorPosition(() => {
-      const position = editor.getPosition();
-      socket.emit("cursorChange", { roomId, userName, position });
-    });
-  };
-
-  useEffect(() => {
-    if (editorRef.current) {
-      const decorations = userCursors.map(({ user, position }) => ({
-        range: new monaco.Range(
-          position.lineNumber,
-          position.column,
-          position.lineNumber,
-          position.column
-        ),
-        options: {
-          className: "remote-cursor",
-          hoverMessage: { value: `**${user}**` },
-        },
-      }));
-
-      editorRef.current.deltaDecorations([], decorations);
-    }
-  }, [userCursors]);
 
   if (!joined) {
     return (
@@ -548,33 +553,15 @@ const App = () => {
       <div className="sidebar">
         <div className="room-info">
           <h2>Code Room: {roomId}</h2>
-          <button onClick={copyRoomId} className="copy-button">
-            Copy Id
-          </button>
-          {copySuccess && <span className="copy-success">{copySuccess}</span>}
+          <h3>Users:</h3>
+          <ul>
+            {users.map((user, index) => (
+              <li key={index}>{user}</li>
+            ))}
+          </ul>
+          <button onClick={leaveRoom}>Leave Room</button>
         </div>
-        <h3>Users in Room:</h3>
-        <ul>
-          {users.map((user, index) => (
-            <li key={index}>{user.slice(0, 8)}...</li>
-          ))}
-        </ul>
-        <p className="typing-indicator">{typing}</p>
-        <select
-          className="language-selector"
-          value={language}
-          onChange={handleLanguageChange}
-        >
-          <option value="javascript">JavaScript</option>
-          <option value="python">Python</option>
-          <option value="java">Java</option>
-          <option value="cpp">C++</option>
-        </select>
-        <button className="leave-button" onClick={leaveRoom}>
-          Leave Room
-        </button>
       </div>
-
       <div className="editor-wrapper">
         <Editor
           height="80%"
@@ -589,10 +576,8 @@ const App = () => {
           }}
           onMount={handleEditorDidMount}
         />
-        <button className="run-button" onClick={runCode}>
-          Run Code
-        </button>
-        <div className="output-container">
+        <button onClick={runCode}>Run Code</button>
+        <div>
           <h3>Output:</h3>
           <pre>{output}</pre>
         </div>

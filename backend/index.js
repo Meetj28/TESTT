@@ -115,7 +115,6 @@
 // });
 
 
-
 import express from "express";
 import http from "http";
 import { Server } from "socket.io";
@@ -124,8 +123,7 @@ import axios from "axios";
 
 const app = express();
 const server = http.createServer(app);
-
-const url = `https://testt-xxvk.onrender.com`;
+const url = `https://realtime-code-editor-utu5.onrender.com`;
 const interval = 30000;
 
 function reloadWebsite() {
@@ -165,8 +163,11 @@ io.on("connection", (socket) => {
   socket.on("join", ({ roomId, userName }) => {
     if (currentRoom) {
       socket.leave(currentRoom);
-      rooms.get(currentRoom).delete(currentUser);
-      io.to(currentRoom).emit("userJoined", Array.from(rooms.get(currentRoom)));
+      const roomData = rooms.get(currentRoom);
+      if (roomData) {
+        delete roomData.users[currentUser];
+        io.to(currentRoom).emit("userJoined", Object.keys(roomData.users));
+      }
     }
 
     currentRoom = roomId;
@@ -175,25 +176,38 @@ io.on("connection", (socket) => {
     socket.join(roomId);
 
     if (!rooms.has(roomId)) {
-      rooms.set(roomId, new Map());
+      rooms.set(roomId, { users: {}, cursors: {} });
     }
 
-    rooms.get(roomId).set(userName, { position: { lineNumber: 1, column: 1 } });
+    const roomData = rooms.get(roomId);
+    roomData.users[userName] = socket.id;
 
-    io.to(roomId).emit("userJoined", Array.from(rooms.get(currentRoom).keys()));
+    io.to(roomId).emit("userJoined", Object.keys(roomData.users));
   });
 
   socket.on("codeChange", ({ roomId, code }) => {
     socket.to(roomId).emit("codeUpdate", code);
   });
 
+  socket.on("cursorChange", ({ roomId, userName, position }) => {
+    const roomData = rooms.get(roomId);
+    if (roomData) {
+      roomData.cursors[userName] = position;
+      io.to(roomId).emit("updateCursors", roomData.cursors);
+    }
+  });
+
   socket.on("leaveRoom", () => {
     if (currentRoom && currentUser) {
-      rooms.get(currentRoom).delete(currentUser);
-      io.to(currentRoom).emit("userJoined", Array.from(rooms.get(currentRoom).keys()));
+      const roomData = rooms.get(currentRoom);
+      if (roomData) {
+        delete roomData.users[currentUser];
+        delete roomData.cursors[currentUser];
+        io.to(currentRoom).emit("userJoined", Object.keys(roomData.users));
+        io.to(currentRoom).emit("updateCursors", roomData.cursors);
+      }
 
       socket.leave(currentRoom);
-
       currentRoom = null;
       currentUser = null;
     }
@@ -207,23 +221,15 @@ io.on("connection", (socket) => {
     io.to(roomId).emit("languageUpdate", language);
   });
 
-  socket.on("cursorChange", ({ roomId, userName, position }) => {
-    if (rooms.has(roomId) && rooms.get(roomId).has(userName)) {
-      rooms.get(roomId).set(userName, { position });
-
-      const userCursors = Array.from(rooms.get(roomId)).map(([user, data]) => ({
-        user,
-        position: data.position,
-      }));
-
-      io.to(roomId).emit("updateCursors", userCursors);
-    }
-  });
-
   socket.on("disconnect", () => {
     if (currentRoom && currentUser) {
-      rooms.get(currentRoom).delete(currentUser);
-      io.to(currentRoom).emit("userJoined", Array.from(rooms.get(currentRoom).keys()));
+      const roomData = rooms.get(currentRoom);
+      if (roomData) {
+        delete roomData.users[currentUser];
+        delete roomData.cursors[currentUser];
+        io.to(currentRoom).emit("userJoined", Object.keys(roomData.users));
+        io.to(currentRoom).emit("updateCursors", roomData.cursors);
+      }
     }
     console.log("User Disconnected", socket.id);
   });
@@ -240,5 +246,5 @@ app.get("*", (req, res) => {
 });
 
 server.listen(port, () => {
-  console.log("Server is working on port", port);
+  console.log("Server is working on port 5000");
 });
