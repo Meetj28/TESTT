@@ -369,7 +369,6 @@
 
 
 
-
 import { useEffect, useState, useRef } from "react";
 import "./App.css";
 import io from "socket.io-client";
@@ -388,7 +387,6 @@ const App = () => {
   const [typing, setTyping] = useState("");
   const [output, setOutput] = useState("");
   const editorRef = useRef(null);
-
   const [userCursors, setUserCursors] = useState([]); // State to store other users' cursors
 
   useEffect(() => {
@@ -409,13 +407,8 @@ const App = () => {
       setLanguage(newLanguage);
     });
 
-    socket.on("updateCursors", (userCursors) => {
-      const cursorsWithColors = Object.entries(userCursors).map(([user, { position, color }]) => ({
-        user,
-        position,
-        color: color || "red", // Default color if none assigned
-      }));
-      setUserCursors(cursorsWithColors);
+    socket.on("updateCursors", (cursors) => {
+      setUserCursors(cursors);
     });
 
     return () => {
@@ -499,61 +492,28 @@ const App = () => {
 
   const handleEditorDidMount = (editor) => {
     editorRef.current = editor;
-  
+
     editor.onDidChangeCursorPosition(() => {
       const position = editor.getPosition();
-      if (position?.lineNumber && position?.column) { // Ensure valid position
-        socket.emit("cursorChange", { roomId, userName, position });
-      }
+      socket.emit("cursorChange", { roomId, userName, position });
     });
   };
-  
-
-  // useEffect(() => {
-  //   if (editorRef.current) {
-  //     const decorations = userCursors.map(({ user, position, color }) => ({
-  //       range: new monaco.Range(
-  //         position.lineNumber,
-  //         position.column,
-  //         position.lineNumber,
-  //         position.column + 1
-  //       ),
-  //       options: {
-  //         className: "remote-cursor",
-  //         inlineClassName: `cursor-${color}`, // Dynamic class for color
-  //         hoverMessage: { value: `**${user}**` },
-  //       },
-  //     }));
-
-  //     editorRef.current.deltaDecorations([], decorations);
-  //   }
-  // }, [userCursors]);
 
   useEffect(() => {
     if (editorRef.current) {
-      // Remove old decorations first
-      const oldDecorations = editorRef.current.getModel().getAllDecorations();
-      editorRef.current.deltaDecorations(oldDecorations.map((d) => d.id), []);
-  
-      // Add new decorations
-      const decorations = userCursors.map(({ user, position }) => {
-        if (position?.lineNumber && position?.column) { // Ensure valid position
-          return {
-            range: new monaco.Range(
-              position.lineNumber,
-              position.column,
-              position.lineNumber,
-              position.column
-            ),
-            options: {
-              className: "remote-cursor",
-              hoverMessage: { value: `**${user}**` },
-            },
-          };
-        }
-        return null;
-      }).filter(Boolean);
-  
+      const decorations = userCursors.map(({ user, position }) => ({
+        range: new monaco.Range(
+          position.lineNumber,
+          position.column,
+          position.lineNumber,
+          position.column
+        ),
+        options: {
+          className: "remote-cursor",
+          hoverMessage: { value: `**${user}**` },
+        },
+      }));
+
       editorRef.current.deltaDecorations([], decorations);
     }
   }, [userCursors]);
