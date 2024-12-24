@@ -19,6 +19,7 @@
     "socket.io": "^4.7.5"
   },
   "devDependencies": {
+    "@convergencelabs/monaco-collab-ext": "^0.4.0",
     "nodemon": "^3.1.4"
   }
 }

@@ -6,10 +6,19 @@ import axios from "axios";
 
 const app = express();
 const server = http.createServer(app);
+const io = new Server(server, {
+  cors: {
+    origin: "*",
+  },
+});
 
+const rooms = new Map();
+const port = process.env.PORT || 5000;
 const url = `https://testt-xxvk.onrender.com`;
-const interval = 30000;
 
+const reloadInterval = 30000;
+
+// Function to periodically reload the website
 function reloadWebsite() {
   axios
     .get(url)
@@ -25,28 +34,22 @@ function reloadWebsite() {
       );
     });
 }
+setInterval(reloadWebsite, reloadInterval);
 
-setInterval(reloadWebsite, interval);
-
-const io = new Server(server, {
-  cors: {
-    origin: "*",
-  },
-});
-
-const rooms = new Map();
-
+// Socket.io connection handler
 io.on("connection", (socket) => {
   console.log("User Connected", socket.id);
 
   let currentRoom = null;
   let currentUser = null;
 
+  // Handle user joining a room
   socket.on("join", ({ roomId, userName }) => {
     if (currentRoom) {
+      // Leave current room
       socket.leave(currentRoom);
-      rooms.get(currentRoom).delete(currentUser);
-      io.to(currentRoom).emit("userJoined", Array.from(rooms.get(currentRoom)));
+      rooms.get(currentRoom)?.delete(currentUser);
+      io.to(currentRoom).emit("userJoined", Array.from(rooms.get(currentRoom) || []));
     }
 
     currentRoom = roomId;
@@ -55,46 +58,23 @@ io.on("connection", (socket) => {
     socket.join(roomId);
 
     if (!rooms.has(roomId)) {
-      rooms.set(roomId, new Map());
+      rooms.set(roomId, new Set());
     }
 
-    rooms.get(roomId).set(userName, { cursor: null, selection: null });
-
-    io.to(roomId).emit(
-      "userJoined",
-      Array.from(rooms.get(currentRoom).keys())
-    );
+    rooms.get(roomId).add(userName);
+    io.to(roomId).emit("userJoined", Array.from(rooms.get(roomId)));
   });
 
+  // Handle code changes
   socket.on("codeChange", ({ roomId, code }) => {
     socket.to(roomId).emit("codeUpdate", code);
   });
 
-  socket.on("cursorMove", ({ roomId, userName, offset }) => {
-    if (rooms.has(roomId) && rooms.get(roomId).has(userName)) {
-      rooms.get(roomId).get(userName).cursor = offset;
-      socket.to(roomId).emit("cursorUpdate", { user: userName, position: offset });
-    }
-  });
-
-  socket.on("selectionChange", ({ roomId, userName, range }) => {
-    if (rooms.has(roomId) && rooms.get(roomId).has(userName)) {
-      rooms.get(roomId).get(userName).selection = range;
-      socket.to(roomId).emit("selectionUpdate", { user: userName, range });
-    }
-  });
-
-  socket.on("languageChange", ({ roomId, language }) => {
-    io.to(roomId).emit("languageUpdate", language);
-  });
-
+  // Handle user leaving a room
   socket.on("leaveRoom", () => {
     if (currentRoom && currentUser) {
-      rooms.get(currentRoom).delete(currentUser);
-      io.to(currentRoom).emit(
-        "userJoined",
-        Array.from(rooms.get(currentRoom).keys())
-      );
+      rooms.get(currentRoom)?.delete(currentUser);
+      io.to(currentRoom).emit("userJoined", Array.from(rooms.get(currentRoom) || []));
 
       socket.leave(currentRoom);
       currentRoom = null;
@@ -102,28 +82,41 @@ io.on("connection", (socket) => {
     }
   });
 
+  // Handle typing indicator
+  socket.on("typing", ({ roomId, userName }) => {
+    socket.to(roomId).emit("userTyping", userName);
+  });
+
+  // Handle language change
+  socket.on("languageChange", ({ roomId, language }) => {
+    io.to(roomId).emit("languageUpdate", language);
+  });
+
+  // Handle real-time cursor position
+  socket.on("cursorUpdate", ({ roomId, userId, position }) => {
+    socket.to(roomId).emit("cursorUpdate", { userId, position });
+  });
+
+  // Handle user disconnect
   socket.on("disconnect", () => {
     if (currentRoom && currentUser) {
-      rooms.get(currentRoom).delete(currentUser);
-      io.to(currentRoom).emit(
-        "userJoined",
-        Array.from(rooms.get(currentRoom).keys())
-      );
+      rooms.get(currentRoom)?.delete(currentUser);
+      io.to(currentRoom).emit("userJoined", Array.from(rooms.get(currentRoom) || []));
     }
     console.log("User Disconnected", socket.id);
   });
 });
 
-const port = process.env.PORT || 5000;
-
+// Serve static files
 const __dirname = path.resolve();
-
 app.use(express.static(path.join(__dirname, "/frontend/dist")));
 
+// Fallback route to serve the frontend
 app.get("*", (req, res) => {
   res.sendFile(path.join(__dirname, "frontend", "dist", "index.html"));
 });
 
+// Start the server
 server.listen(port, () => {
-  console.log(`Server is working on port ${port}`);
+  console.log(`Server is running on port ${port}`);
 });

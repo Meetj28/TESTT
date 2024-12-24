@@ -1,15 +1,23 @@
-import { defineConfig } from 'vite';
-import react from '@vitejs/plugin-react';
+import { defineConfig } from 'vite'
+import react from '@vitejs/plugin-react'
 
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react()],
-  build: {
-    rollupOptions: {
-      external: ['@convergencelabs/monaco-collab-ext'], // Exclude this dependency from being bundled
-    },
-  },
-  optimizeDeps: {
-    include: ['@convergencelabs/monaco-collab-ext'], // Ensure it's pre-bundled for dev
-  },
-});
+})
+
+
+// import { defineConfig } from "vite";
+// import react from "@vitejs/plugin-react";
+
+// export default defineConfig({
+//   plugins: [react()],
+//   resolve: {
+//     alias: {
+//       "@convergencelabs/monaco-collab-ext": "@convergencelabs/monaco-collab-ext",
+//     },
+//   },
+//   optimizeDeps: {
+//     include: ["@convergencelabs/monaco-collab-ext"],
+//   },
+// });

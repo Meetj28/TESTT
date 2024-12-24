@@ -12,13 +12,9 @@ const App = () => {
   const [userName, setUserName] = useState("");
   const [language, setLanguage] = useState("javascript");
   const [code, setCode] = useState("// start code here");
-  const [copySuccess, setCopySuccess] = useState("");
   const [users, setUsers] = useState([]);
-  const [typing, setTyping] = useState("");
-
-  const editorRef = useRef(null);
-  const cursorManagerRef = useRef(null);
-  const selectionManagerRef = useRef(null);
+  const editorRef = useRef(null); // Reference to the editor
+  const cursorManagerRef = useRef(null); // Reference to RemoteCursorManager
 
   useEffect(() => {
     socket.on("userJoined", (users) => {
@@ -27,6 +23,16 @@ const App = () => {
 
     socket.on("codeUpdate", (newCode) => {
       setCode(newCode);
+    });
+
+    socket.on("cursorUpdate", ({ userId, position }) => {
+      // Update remote cursor position
+      if (cursorManagerRef.current) {
+        const cursor = cursorManagerRef.current.getCursor(userId);
+        if (cursor) {
+          cursor.setOffset(position);
+        }
+      }
     });
 
     socket.on("userTyping", (user) => {
@@ -41,6 +47,7 @@ const App = () => {
     return () => {
       socket.off("userJoined");
       socket.off("codeUpdate");
+      socket.off("cursorUpdate");
       socket.off("userTyping");
       socket.off("languageUpdate");
     };
@@ -74,13 +81,19 @@ const App = () => {
     setLanguage("javascript");
   };
 
-  const copyRoomId = () => {
-    navigator.clipboard.writeText(roomId);
-    setCopySuccess("Copied!");
-    setTimeout(() => setCopySuccess(""), 2000);
+  const handleCodeChange = (newCode) => {
+    setCode(newCode);
+    socket.emit("codeChange", { roomId, code: newCode });
+    socket.emit("typing", { roomId, userName });
   };
 
-  const handleEditorDidMount = (editor) => {
+  const handleLanguageChange = (e) => {
+    const newLanguage = e.target.value;
+    setLanguage(newLanguage);
+    socket.emit("languageChange", { roomId, language: newLanguage });
+  };
+
+  const editorDidMount = (editor) => {
     editorRef.current = editor;
 
     // Initialize RemoteCursorManager
@@ -90,29 +103,18 @@ const App = () => {
       tooltipDuration: 2,
     });
 
-    // Initialize RemoteSelectionManager
-    selectionManagerRef.current = new MonacoCollabExt.RemoteSelectionManager({
-      editor,
+    // Add current user's cursor
+    const localCursor = cursorManagerRef.current.addCursor(userName, "red", userName);
+
+    editor.onDidChangeCursorPosition((e) => {
+      const offset = editor.getModel().getOffsetAt(e.position);
+      socket.emit("cursorMove", { roomId, userId: userName, position: offset });
+
+      // Update your cursor position locally
+      if (localCursor) {
+        localCursor.setOffset(offset);
+      }
     });
-
-    // Sync code changes from the server
-    editor.onDidChangeModelContent(() => {
-      const newCode = editor.getValue();
-      setCode(newCode);
-      socket.emit("codeChange", { roomId, code: newCode });
-      socket.emit("typing", { roomId, userName });
-    });
-  };
-
-  const handleCodeChange = (newCode) => {
-    setCode(newCode);
-    socket.emit("codeChange", { roomId, code: newCode });
-  };
-
-  const handleLanguageChange = (e) => {
-    const newLanguage = e.target.value;
-    setLanguage(newLanguage);
-    socket.emit("languageChange", { roomId, language: newLanguage });
   };
 
   if (!joined) {
@@ -143,10 +145,6 @@ const App = () => {
       <div className="sidebar">
         <div className="room-info">
           <h2>Code Room: {roomId}</h2>
-          <button onClick={copyRoomId} className="copy-button">
-            Copy Id
-          </button>
-          {copySuccess && <span className="copy-success">{copySuccess}</span>}
         </div>
         <h3>Users in Room:</h3>
         <ul>
@@ -154,13 +152,12 @@ const App = () => {
             <li key={index}>{user.slice(0, 8)}...</li>
           ))}
         </ul>
-        <p className="typing-indicator">{typing}</p>
         <select
           className="language-selector"
           value={language}
           onChange={handleLanguageChange}
         >
-          <option value="javascript">JavaScript</option>
+          <option value="javasript">JavaScript</option>
           <option value="python">Python</option>
           <option value="java">Java</option>
           <option value="cpp">C++</option>
@@ -178,11 +175,11 @@ const App = () => {
           value={code}
           onChange={handleCodeChange}
           theme="vs-dark"
-          onMount={handleEditorDidMount}
           options={{
             minimap: { enabled: false },
             fontSize: 14,
           }}
+          onMount={editorDidMount}
         />
       </div>
     </div>
