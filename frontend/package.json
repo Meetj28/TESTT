@@ -12,6 +12,7 @@
   "dependencies": {
     "@convergencelabs/monaco-collab-ext": "^0.4.0",
     "@monaco-editor/react": "^4.6.0",
+    "lodash": "^4.17.21",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "socket.io-client": "^4.8.1"

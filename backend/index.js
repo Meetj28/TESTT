@@ -4,8 +4,10 @@ import { Server } from "socket.io";
 import path from "path";
 import axios from "axios";
 import mongoose from "mongoose";
+// import debounce from "lodash/debounce";
 
 
+// const mongoose = require('mongoose');
 
 const app = express();
 const server = http.createServer(app);
@@ -19,21 +21,23 @@ const rooms = new Map(); // Map to store room data (users and code)
 
 const port = process.env.PORT || 5000;
 
-const url = `https://chalega-tu.onrender.com`;
-//const url = `http://localhost:5000`; // Replace with your server URL
+// const url = `https://chalega-tu.onrender.com`;
+const url = `http://localhost:5000`; // Replace with your server URL
 
 const reloadInterval = 30000;
-
-mongoose.connect("mongodb+srv://dbms17d19a:@Aimjee_21@cluster0.3d2nt.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0/codeEditor", {
-  useNewUrlParser: true,
-  useUnifiedTopology: true,
+const db = 'mongodb+srv://meet28:meetjain@cluster0.4tmr9.mongodb.net/editor?retryWrites=true&w=majority&appName=Cluster0';
+mongoose.connect(db).then(() => {
+  console.log("conection success");
+}).catch((e) => {
+  console.log(e);
 });
 
-const db = mongoose.connection;
-db.on("error", console.error.bind(console, "connection error:"));
-db.once("open", () => {
-  console.log("MongoDB connected successfully");
-});
+// const db = mongoose.connection;
+// db.on("error", console.error.bind(console, "connection error:"));
+// // db.on("error", console.log("connection nhi hua"));
+// db.once("open", () => {
+//   console.log("MongoDB connected successfully");
+// });
 
 const roomSchema = new mongoose.Schema({
   roomId: { type: String, required: true, unique: true },
@@ -107,14 +111,22 @@ io.on("connection", (socket) => {
     if (!room) {
       room = new Room({ roomId, users: [userName] });
       await room.save();
+      rooms.set(roomId, { code: "// start code here", users: new Set() });
     } else {
       room.users.push(userName);
       room.users = [...new Set(room.users)]; // Avoid duplicates
       await room.save();
+      if (!rooms.has(roomId)) {
+        rooms.set(roomId, { code: room.code || "// start code here", users: new Set() });
+      }
     }
 
-    io.to(roomId).emit("userJoined", room.users);
-    socket.emit("codeUpdate", room.code);// Send current code to the user
+    // io.to(roomId).emit("userJoined", room.users);
+    // socket.emit("codeUpdate", room.code);// Send current code to the user
+
+    rooms.get(roomId).users.add(userName);
+    io.to(roomId).emit("userJoined", Array.from(rooms.get(roomId).users));
+    socket.emit("codeUpdate", rooms.get(roomId).code);
   });
 
  
@@ -175,6 +187,15 @@ io.on("connection", (socket) => {
     }
    }
   });
+
+
+  // socket.on("disconnect", () => {
+  //   if (cursorMap.current[userId]) {
+  //     cursorManagerRef.current.removeCursor(userId);
+  //     delete cursorMap.current[userId];
+  //   }
+  //   selectionManagerRef.current.removeSelection(userId);
+  // });
 });
 
 // Serve static files (e.g., for a React frontend)
