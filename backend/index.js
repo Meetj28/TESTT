@@ -21,8 +21,8 @@ const rooms = new Map(); // Map to store room data (users and code)
 
 const port = process.env.PORT || 5000;
 
-// const url = `https://chalega-tu.onrender.com`;
-const url = `http://localhost:5000`; // Replace with your server URL
+const url = `https://testt-xxvk.onrender.com`;
+// const url = `http://localhost:5000`; // Replace with your server URL
 
 const reloadInterval = 30000;
 const db = 'mongodb+srv://meet28:meetjain@cluster0.4tmr9.mongodb.net/editor?retryWrites=true&w=majority&appName=Cluster0';

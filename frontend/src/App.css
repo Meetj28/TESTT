@@ -10,6 +10,11 @@ body {
   color: #333;
 }
 
+input[type="file"] {
+  margin: 10px 0;
+  padding: 5px;
+}
+
 .join-container {
   display: flex;
   justify-content: center;
